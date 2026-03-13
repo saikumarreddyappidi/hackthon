@@ -5,7 +5,7 @@
 const BACKEND_URL =
   process.env.REACT_APP_API_URL || (
     window.location.hostname === 'saikumarreddyappidi.github.io'
-      ? 'https://your-render-service.onrender.com'
+      ? 'https://samrtstudy.onrender.com'
       : 'http://localhost:8000'
   );
 
