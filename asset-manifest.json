@@ -1,0 +1,13 @@
+{
+  "files": {
+    "main.css": "/hackthon/static/css/main.aed15d60.css",
+    "main.js": "/hackthon/static/js/main.a2c5873e.js",
+    "index.html": "/hackthon/index.html",
+    "main.aed15d60.css.map": "/hackthon/static/css/main.aed15d60.css.map",
+    "main.a2c5873e.js.map": "/hackthon/static/js/main.a2c5873e.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.aed15d60.css",
+    "static/js/main.a2c5873e.js"
+  ]
+}
