@@ -1,0 +1,10 @@
+fastapi>=0.135.0
+uvicorn>=0.41.0
+sqlalchemy>=2.0.48
+python-jose[cryptography]>=3.5.0
+python-multipart>=0.0.22
+scikit-learn>=1.8.0
+numpy>=2.4.0
+pandas>=3.0.0
+python-dotenv>=1.0.1
+pydantic[email]>=2.12.0
