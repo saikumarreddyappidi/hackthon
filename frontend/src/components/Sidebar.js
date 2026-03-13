@@ -10,6 +10,9 @@ const navItems = [
   { to: '/predictions',    icon: '🤖', label: 'AI Predictions' },
   { to: '/chatbot',        icon: '💬', label: 'AI Chatbot' },
   { to: '/recommendations',icon: '💡', label: 'Recommendations' },
+  { to: '/studykit',       icon: '📚', label: 'Study Kit Generator' },
+  { to: '/learningmap',    icon: '🗺️', label: 'Learning Map' },
+  { to: '/timer',          icon: '⏱️', label: 'Focus Timer' },
   { to: '/profile',        icon: '👤', label: 'Profile' },
 ];
 
@@ -17,8 +20,8 @@ export default function Sidebar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate('/login');
   };
 
@@ -53,9 +56,14 @@ export default function Sidebar() {
             {item.label}
           </NavLink>
         ))}
+
+        <button type="button" className="nav-item nav-item-logout" onClick={handleLogout}>
+          <span className="icon">🚪</span>
+          Logout
+        </button>
       </nav>
 
-      <button className="logout-btn" onClick={handleLogout}>
+      <button type="button" className="logout-btn" onClick={handleLogout}>
         <span>🚪</span> Logout
       </button>
     </aside>

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ResponsiveContainer, RadialBarChart, RadialBar, Tooltip } from 'recharts';
 import { useAuth } from '../AuthContext';
 import API from '../api';
+import { exportReport } from '../utils/exportReport';
 
 function Countdown({ examDate }) {
   const [time, setTime] = useState({});
@@ -74,6 +75,11 @@ export default function Dashboard() {
       <div className="page-header">
         <h1>👋 Welcome back, {user?.name?.split(' ')[0]}! <span className="fire-pulse">🔥</span></h1>
         <p>Here's your study overview for today — {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+        <button
+          className="btn btn-secondary"
+          style={{ marginTop: 12 }}
+          onClick={() => exportReport(user, analytics)}
+        >📄 Export Report</button>
       </div>
 
       {loading ? (

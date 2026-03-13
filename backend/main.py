@@ -1,10 +1,15 @@
 from fastapi import FastAPI, Depends, HTTPException, status
+from pydantic import BaseModel as PydanticBaseModel
+import httpx
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import List, Optional, Dict
 import json
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 from database import engine, get_db, Base
 import models
@@ -514,6 +519,223 @@ def ai_chatbot(
         "answer": answer,
         "suggested_questions": suggested_questions
     }
+
+
+# ─── GROQ PROXY ───────────────────────────────────────────────────────────────
+
+_GROQ_KEY = os.getenv(
+    "GROQ_API_KEY",
+    ""
+)
+_GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+
+
+class ClaudeRequest(PydanticBaseModel):
+    system: str
+    message: str
+    max_tokens: int = 2000
+    response_format: str | None = None
+
+
+class QuizAttempt(PydanticBaseModel):
+    topic: str = "Study Kit"
+    score: int = 0
+    total: int = 0
+    accuracy: int = 0
+    timestamp: Optional[str] = None
+
+
+class LogoutEmailPayload(PydanticBaseModel):
+    session_minutes: float = 0
+    quiz_attempts: List[QuizAttempt] = []
+
+
+def _days_until(date_text: Optional[str]) -> Optional[int]:
+    if not date_text:
+        return None
+    try:
+        d = datetime.strptime(date_text, "%Y-%m-%d").date()
+        return (d - datetime.utcnow().date()).days
+    except Exception:
+        return None
+
+
+def _build_subject_countdowns(user: models.User) -> List[Dict[str, str]]:
+    subjects = [s.strip() for s in (user.subjects or "").split(",") if s.strip()]
+    if not subjects:
+        subjects = ["General"]
+
+    subject_dates: Dict[str, str] = {}
+    if user.subject_exam_dates:
+        try:
+            parsed = json.loads(user.subject_exam_dates)
+            if isinstance(parsed, dict):
+                subject_dates = {str(k).strip(): str(v).strip() for k, v in parsed.items()}
+        except Exception:
+            subject_dates = {}
+
+    result = []
+    for subject in subjects:
+        exam_date = subject_dates.get(subject) or user.exam_date
+        days_left = _days_until(exam_date)
+        if days_left is None:
+            countdown = "Date not set"
+        elif days_left >= 0:
+            countdown = f"{days_left} day(s) left"
+        else:
+            countdown = f"{abs(days_left)} day(s) overdue"
+        result.append({
+            "subject": subject,
+            "exam_date": exam_date or "Not set",
+            "countdown": countdown,
+        })
+    return result
+
+
+def _send_logout_email(
+    user: models.User,
+    session_minutes: float,
+    attempts: List[QuizAttempt],
+    countdowns: List[Dict[str, str]],
+):
+    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_password = os.getenv("SMTP_PASSWORD")
+    smtp_from = os.getenv("SMTP_FROM", smtp_user or "")
+
+    if not smtp_user or not smtp_password:
+        return False, "Email service not configured. Set SMTP_USER and SMTP_PASSWORD."
+
+    overall_days = _days_until(user.exam_date)
+    if overall_days is None:
+        overall_line = f"Overall Exam Date: {user.exam_date or 'Not set'}"
+    elif overall_days >= 0:
+        overall_line = f"Overall Exam Date: {user.exam_date} ({overall_days} day(s) left)"
+    else:
+        overall_line = f"Overall Exam Date: {user.exam_date} ({abs(overall_days)} day(s) overdue)"
+
+    subject_lines = "\n".join(
+        [f"- {r['subject']}: {r['exam_date']} | {r['countdown']}" for r in countdowns]
+    )
+
+    quiz_lines = "\n".join([
+        f"- {a.topic}: {a.score}/{a.total} ({a.accuracy}%)"
+        + (f" at {a.timestamp}" if a.timestamp else "")
+        for a in attempts
+    ]) if attempts else "- No quiz attempts recorded"
+
+    body = (
+        f"Hi {user.name},\n\n"
+        "You have logged out of SmartStudy. Here is your session summary:\n\n"
+        f"Time spent this visit: {round(session_minutes, 2)} minute(s)\n"
+        f"{overall_line}\n\n"
+        "Subject-wise exam countdown:\n"
+        f"{subject_lines}\n\n"
+        "Recent quiz attempts:\n"
+        f"{quiz_lines}\n\n"
+        "Keep going. Consistency wins.\n"
+        "- SmartStudy"
+    )
+
+    msg = MIMEMultipart()
+    msg["From"] = smtp_from
+    msg["To"] = user.email
+    msg["Subject"] = "SmartStudy Logout Summary"
+    msg.attach(MIMEText(body, "plain"))
+
+    with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as server:
+        server.starttls()
+        server.login(smtp_user, smtp_password)
+        server.sendmail(smtp_from, [user.email], msg.as_string())
+
+    return True, "Email sent"
+
+
+@app.post("/claude")
+async def claude_proxy(payload: ClaudeRequest):
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    system_text = payload.system
+    if payload.response_format == "json":
+        system_text += "\n\nReturn valid JSON only. Do not include markdown or code fences."
+
+    body = {
+        "model": _GROQ_MODEL,
+        "messages": [
+            {"role": "system", "content": system_text},
+            {"role": "user", "content": payload.message},
+        ],
+        "max_tokens": payload.max_tokens,
+        "temperature": 0.2,
+    }
+    if payload.response_format == "json":
+        body["response_format"] = {"type": "json_object"}
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        resp = await client.post(
+            url,
+            headers={
+                "Authorization": f"Bearer {_GROQ_KEY}",
+                "Content-Type": "application/json",
+            },
+            json=body,
+        )
+
+    # Some Groq models may not support response_format; retry without it.
+    if resp.status_code == 400 and payload.response_format == "json":
+        body.pop("response_format", None)
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {_GROQ_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json=body,
+            )
+
+    if resp.status_code != 200:
+        raise HTTPException(status_code=resp.status_code, detail=resp.text)
+
+    data = resp.json()
+    text_out = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+    if isinstance(text_out, list):
+        # Some providers return segmented content arrays.
+        text_out = "".join(part.get("text", "") for part in text_out if isinstance(part, dict))
+    return {"text": text_out}
+
+
+@app.post("/logout-email/{user_id}")
+def send_logout_email(
+    user_id: int,
+    payload: LogoutEmailPayload,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    countdowns = _build_subject_countdowns(user)
+    recent_attempts = sorted(
+        payload.quiz_attempts,
+        key=lambda a: a.timestamp or "",
+        reverse=True,
+    )[:10]
+
+    try:
+        sent, message = _send_logout_email(
+            user=user,
+            session_minutes=payload.session_minutes,
+            attempts=recent_attempts,
+            countdowns=countdowns,
+        )
+        return {"sent": sent, "message": message}
+    except Exception as e:
+        return {"sent": False, "message": f"Failed to send email: {str(e)}"}
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import { useAuth } from '../AuthContext';
 import API from '../api';
+import { exportReport } from '../utils/exportReport';
 
 const COLORS = ['#059669', '#6366f1', '#f59e0b', '#10b981', '#6366f1', '#f59e0b'];
 
@@ -45,6 +46,7 @@ export default function Analytics() {
       <div className="page-header">
         <h1>📊 Analytics</h1>
         <p>Deep insights into your study patterns and habits</p>
+        <button className="btn btn-secondary" style={{ marginTop: 12 }} onClick={() => exportReport(user, data)}>📄 Export Report</button>
       </div>
 
       {/* Summary stats */}
