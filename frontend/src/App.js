@@ -21,7 +21,7 @@ import './App.css';
 
 const routerBasename =
   window.location.hostname === 'saikumarreddyappidi.github.io'
-    ? '/smartstudy'
+    ? '/hackthon'
     : '/';
 
 function PrivateRoute({ children }) {

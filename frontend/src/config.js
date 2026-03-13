@@ -3,9 +3,11 @@
 // ============================================================
 // API key lives in the backend — no longer needed in the browser
 const BACKEND_URL =
-  window.location.hostname === 'saikumarreddyappidi.github.io'
-    ? 'https://smartstudy-t8no.onrender.com'
-    : 'http://localhost:8000';
+  process.env.REACT_APP_API_URL || (
+    window.location.hostname === 'saikumarreddyappidi.github.io'
+      ? 'https://your-render-service.onrender.com'
+      : 'http://localhost:8000'
+  );
 
 // localStorage keys
 export const LS_QUIZ_RESULTS       = "smartstudy_quiz_results";
