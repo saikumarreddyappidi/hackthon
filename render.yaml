@@ -12,4 +12,18 @@ services:
       - key: SECRET_KEY
         generateValue: true
       - key: CORS_ORIGINS
-        value: https://saikumarreddyappidi.github.io
+        value: http://localhost:3000,https://saikumarreddyappidi.github.io,https://smartstudy-frontend-saikumarreddyappidi.onrender.com
+
+  - type: static
+    name: smartstudy-frontend-saikumarreddyappidi
+    rootDir: frontend
+    plan: free
+    buildCommand: npm install && npm run build
+    staticPublishPath: build
+    envVars:
+      - key: REACT_APP_API_URL
+        value: https://smartstudy-api-saikumarreddyappidi.onrender.com
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

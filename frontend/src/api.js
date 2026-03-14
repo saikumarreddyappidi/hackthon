@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || (
   window.location.hostname === 'saikumarreddyappidi.github.io'
-    ? 'https://samrtstudy.onrender.com'
+    ? 'https://smartstudy-api-saikumarreddyappidi.onrender.com'
     : 'http://localhost:8000'
 );
 
